@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2018", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/index.ts",
+    "src/types.ts",
+    "src/verify.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/core.ts",
+    "src/express",
+    "src/next"
+  ]
+}
