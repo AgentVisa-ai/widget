@@ -16,10 +16,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentvisa/widget.git"
+    "url": "git+https://github.com/AgentVisa-ai/widget.git"
   },
   "bugs": {
-    "url": "https://github.com/agentvisa/widget/issues"
+    "url": "https://github.com/AgentVisa-ai/widget/issues"
   },
   "homepage": "https://agentvisa.ai",
   "type": "module",
