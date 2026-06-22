@@ -1,2 +1,3 @@
+# Override root .gitignore — widget/dist IS tracked (it's the published package output)
+!dist/
 node_modules/
-dist/

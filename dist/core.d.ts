@@ -3,6 +3,21 @@
  * Used by Express and Next.js middleware — no framework deps here.
  */
 export declare const DEFAULT_API_BASE = "https://api.agentvisa.ai";
+export declare const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
+/**
+ * Detect whether an incoming request looks like an AI agent.
+ *
+ * Used to guard the viral redirect loop — we only send requests to
+ * agentvisa.ai/for-agents when there is evidence the requester is an
+ * AI agent that can act on the instructions there. Bot scrapers and
+ * human browsers get a plain 401 instead.
+ *
+ * Detection hierarchy:
+ *   Strong  (any one → true): RFC 9421 Signature-Input, Agent-Authorization header
+ *   Medium  (any one → true): known AI User-Agent pattern
+ *   Weak combo (both needed): no browser fingerprint headers + no text/html in Accept
+ */
+export declare function isLikelyAiAgent(headers: Record<string, string | string[] | undefined>): boolean;
 export interface AgentVisaConfig {
     /** Your widget ID from the AgentVisa dashboard */
     widgetId: string;
@@ -12,30 +27,56 @@ export interface AgentVisaConfig {
     apiBaseUrl?: string;
     /**
      * What to do when verification fails or token is missing.
-     * "block" (default) — return 401 and stop the request.
+     * "redirect" (default) — redirect the agent to redirectUrl (agentvisa.ai/for-agents).
+     * "block"    — return 401 and stop the request. The redirect_url is still included
+     *              in the JSON body so the agent knows where to go.
      * "passthrough" — attach result to request and continue; let your
      *   handler decide. Useful for soft-gating or analytics.
      */
-    onUnverified?: "block" | "passthrough";
+    onUnverified?: "redirect" | "block" | "passthrough";
+    /**
+     * Where to send unverified agents.
+     * Defaults to "https://agentvisa.ai/for-agents".
+     * Only used when onUnverified is "redirect".
+     */
+    redirectUrl?: string;
+    /**
+     * Timeout in milliseconds for the /v1/verify API call.
+     * Defaults to 5000ms (5 seconds).
+     * If the AgentVisa API does not respond within this window, callVerify()
+     * returns { valid: false, reason: "network_error" } — your onUnverified
+     * policy then applies, so your site stays up even if AgentVisa is down.
+     */
+    timeoutMs?: number;
 }
 export interface VerifyResult {
     valid: boolean;
     reason: string;
     plan?: string;
     widget_id?: string;
-    human_name?: string | null;
     verified_at?: string | null;
     expires_at?: string | null;
-    five_factor?: string;
-    age_over_18?: string;
-    age_over_21?: string;
-    multiple_agents_authorized?: string;
-    verifications_today?: number;
+    domain_verified?: boolean;
+    age_over_18?: "y" | "n" | "null";
+    age_over_21?: "y" | "n" | "null";
+    gov_id_pic_validation?: "y" | "n" | "null";
+    multiple_agents_authorized?: "y" | "n" | "null";
+    member_since?: string;
+    email_confirmed?: boolean;
+    phone_last4_confirmed?: boolean;
+    web_bot_auth_bound?: boolean;
 }
 /**
  * Call /v1/verify with a TemporaryToken.
- * Returns the full API response or a synthetic error result on network failure.
+ *
+ * @param temporaryToken  The tmp_xxx token from the agent's request header
+ * @param config          Resolved widget config (widgetId, apiKey, apiBaseUrl)
+ * @param forwardHeaders  Optional headers from the original agent request.
+ *                        Pass these so the backend can detect Web Bot Auth binding
+ *                        (Signature-Input header) and populate web_bot_auth_bound.
+ *
+ * Returns the full VerifyResult or a synthetic error result on network failure.
  */
-export declare function callVerify(temporaryToken: string, config: Required<AgentVisaConfig>): Promise<VerifyResult>;
+export declare function callVerify(temporaryToken: string, config: Required<AgentVisaConfig>, forwardHeaders?: Record<string, string | string[] | undefined>): Promise<VerifyResult>;
 export declare function resolveConfig(config: AgentVisaConfig): Required<AgentVisaConfig>;
 //# sourceMappingURL=core.d.ts.map

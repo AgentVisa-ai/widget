@@ -28,7 +28,7 @@
  *   X-AgentVisa-Verified: true
  *   X-AgentVisa-Reason:   ok
  */
-import { callVerify, resolveConfig } from "../core.js";
+import { callVerify, resolveConfig, isLikelyAiAgent } from "../core.js";
 /**
  * Wrap a Next.js middleware handler (or use standalone).
  *
@@ -39,23 +39,46 @@ import { callVerify, resolveConfig } from "../core.js";
 export function withAgentVisa(config, handler) {
     const resolved = resolveConfig(config);
     return async function agentVisaMiddleware(request) {
-        const token = request.headers.get("x-agentvisa-token") ?? undefined;
+        // Accept both header modes:
+        //   Standard:     X-AgentVisa-Token: tmp_xxx
+        //   Web Bot Auth: AgentVisa-Assertion: tmp_xxx (covered by RFC 9421 Signature-Input)
+        const token = request.headers.get("agentvisa-assertion") ??
+            request.headers.get("x-agentvisa-token") ??
+            undefined;
+        // Convert Headers to a plain object so we can forward Signature-Input
+        const forwardHeaders = {};
+        request.headers.forEach((value, key) => { forwardHeaders[key] = value; });
         // ── No token ──────────────────────────────────────────────────────────
         if (!token) {
             if (resolved.onUnverified === "passthrough") {
                 const req = addVerificationHeaders(request, false, "no_token");
                 return handler ? handler(req) : passthroughResponse(req);
             }
-            return blockedResponse(resolved.widgetId, "no_token");
+            if (resolved.onUnverified === "redirect") {
+                // Only redirect if this actually looks like an AI agent.
+                // Bot scrapers and human browsers get a plain 401 — we don't want
+                // them flooding agentvisa.ai/for-agents or triggering the growth loop
+                // for non-agent traffic.
+                const reqHeaders = {};
+                request.headers.forEach((v, k) => { reqHeaders[k] = v; });
+                if (!isLikelyAiAgent(reqHeaders)) {
+                    return blockedResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
+                }
+                return redirectResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
+            }
+            return blockedResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
         }
         // ── Verify ────────────────────────────────────────────────────────────
-        const result = await callVerify(token, resolved);
+        const result = await callVerify(token, resolved, forwardHeaders);
         if (!result.valid) {
             if (resolved.onUnverified === "passthrough") {
                 const req = addVerificationHeaders(request, false, result.reason);
                 return handler ? handler(req) : passthroughResponse(req);
             }
-            return blockedResponse(resolved.widgetId, result.reason);
+            if (resolved.onUnverified === "redirect") {
+                return redirectResponse(resolved.widgetId, result.reason, resolved.redirectUrl);
+            }
+            return blockedResponse(resolved.widgetId, result.reason, resolved.redirectUrl);
         }
         // ── Verified ──────────────────────────────────────────────────────────
         const req = addVerificationHeaders(request, true, "ok");
@@ -63,14 +86,37 @@ export function withAgentVisa(config, handler) {
     };
 }
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function blockedResponse(widgetId, reason) {
+function redirectResponse(widgetId, reason, redirectUrl) {
+    const isVerificationFailure = reason !== "no_token";
     return new Response(JSON.stringify({
-        error: "agentvisa_required",
+        error: isVerificationFailure ? "agentvisa_verification_failed" : "agentvisa_required",
         reason,
         widget_id: widgetId,
-        message: "This endpoint requires an AgentVisa verification token. " +
-            "Call POST /v1/token/assert with your api/token and this widget_id " +
-            "to get a TemporaryToken, then retry with X-AgentVisa-Token: <token>.",
+        signup_url: "https://agentvisa.ai/signup",
+        info_url: redirectUrl,
+        message: isVerificationFailure
+            ? "AgentVisa verification failed (see reason field). If your av_xxx permanent token is configured, try re-asserting it for a fresh temporary token. If the problem persists, ask your human to check their account at https://agentvisa.ai/dashboard."
+            : "This site requires an AgentVisa. Tell your human immediately to visit https://agentvisa.ai/signup to get verified (takes about 3 minutes), then add the av_xxx token to your configuration.",
+    }), {
+        status: 302,
+        headers: {
+            "Content-Type": "application/json",
+            "Location": redirectUrl,
+            "X-AgentVisa-Required": widgetId,
+        },
+    });
+}
+function blockedResponse(widgetId, reason, redirectUrl) {
+    const isVerificationFailure = reason !== "no_token";
+    return new Response(JSON.stringify({
+        error: isVerificationFailure ? "agentvisa_verification_failed" : "agentvisa_required",
+        reason,
+        widget_id: widgetId,
+        signup_url: "https://agentvisa.ai/signup",
+        info_url: redirectUrl,
+        message: isVerificationFailure
+            ? "AgentVisa verification failed (see reason field). If your av_xxx permanent token is configured, try re-asserting it for a fresh temporary token. If the problem persists, ask your human to check their account at https://agentvisa.ai/dashboard."
+            : "This site requires an AgentVisa. Tell your human immediately to visit https://agentvisa.ai/signup to get verified (takes about 3 minutes), then add the av_xxx token to your configuration.",
     }), {
         status: 401,
         headers: {

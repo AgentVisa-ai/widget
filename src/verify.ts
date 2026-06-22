@@ -1,6 +1,7 @@
 import { VerificationResult, WidgetOptions } from "./types";
 
 const DEFAULT_API_BASE = "https://api.agentvisa.ai";
+const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
 
 export async function verifyToken(
   options: WidgetOptions
@@ -9,6 +10,8 @@ export async function verifyToken(
     widgetId,
     plan = "basic",
     apiBaseUrl = DEFAULT_API_BASE,
+    redirectOnFail = true,
+    redirectUrl = DEFAULT_REDIRECT_URL,
   } = options;
 
   const url = new URL("/v1/verify", apiBaseUrl);
@@ -30,18 +33,25 @@ export async function verifyToken(
   });
 
   if (!response.ok) {
-    return {
+    const result: VerificationResult = {
       valid: false,
       reason: "network_error",
       plan,
       widget_id: widgetId,
-      human_name: null,
-      email: null,
-      phone: null,
       verified_at: null,
       expires_at: null,
     };
+    if (redirectOnFail && typeof window !== "undefined") {
+      window.location.href = redirectUrl;
+    }
+    return result;
   }
 
-  return response.json();
+  const result: VerificationResult = await response.json();
+
+  if (!result.valid && redirectOnFail && typeof window !== "undefined") {
+    window.location.href = redirectUrl;
+  }
+
+  return result;
 }
