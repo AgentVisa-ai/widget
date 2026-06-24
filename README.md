@@ -78,7 +78,7 @@ Signature: sig1=:base64sig:
 
 ### `onUnverified` modes
 
-- **`'redirect'`** (default) — AI agents get a `302` to `/for-agents` with instructions. Human browsers and bot scrapers get a plain `401`. This is the viral growth mode: unverified agents send their human to sign up, then come back verified.
+- **`'redirect'`** (default) — AI agents (including headless/automation browsers) get a `302` to the AgentVisa challenge page (`/verify`), with `?w=<widget_id>&from=<host>` appended for attribution. Other browser-class requests get an instructive `401` **challenge** — an HTML page for browsers, JSON otherwise — that points both agents and humans to the next step, never a bare dead-end. This is the viral growth mode: unverified agents reach the sign-up path, then come back verified.
 - **`'block'`** — All unverified requests get `401`. Quiet hard gate.
 - **`'passthrough'`** — Attach the result to `req.agentVisa` (Express) or response headers (Next.js) and continue. Use this for soft-gating or analytics.
 

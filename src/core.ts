@@ -4,7 +4,7 @@
  */
 
 export const DEFAULT_API_BASE = "https://api.agentvisa.ai";
-export const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
+export const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/verify";
 
 // ── Agent signal detection ────────────────────────────────────────────────────
 
@@ -28,6 +28,13 @@ const AI_UA_PATTERNS: RegExp[] = [
   /agentvisa/i,
   /python-httpx/i,
   /python-requests/i,
+  // Browser automation frameworks — AI agents increasingly drive real or headless browsers
+  /headless/i,
+  /playwright/i,
+  /puppeteer/i,
+  /selenium/i,
+  /webdriver/i,
+  /phantomjs/i,
 ];
 
 /**
@@ -70,6 +77,65 @@ export function isLikelyAiAgent(
   if (!hasBrowserFingerprint && !acceptsHtml && looksLikeApiClient) return true;
 
   return false;
+}
+
+/**
+ * True when the caller will render HTML (a browser, or an agent driving one).
+ * Used to decide whether to serve an HTML challenge page vs a JSON challenge.
+ */
+export function wantsHtml(
+  headers: Record<string, string | string[] | undefined>
+): boolean {
+  const v = headers["accept"];
+  const accept = Array.isArray(v) ? v[0] : (v ?? "");
+  return accept.includes("text/html");
+}
+
+/**
+ * Instructive challenge page served to browser-class unverified requests.
+ *
+ * A bare 401 dead-ends AI agents that drive a browser (they never discover
+ * /for-agents). This page guides BOTH audiences: a human sees a short
+ * explainer; an agent sees the token instructions, the <meta agentvisa-required>
+ * discovery tag, and the link to follow — so no agent is ever stranded.
+ */
+export function challengeHtml(widgetId: string, redirectUrl: string, host?: string): string {
+  const link = buildRedirectUrl(redirectUrl, widgetId, host);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentVisa — verification required</title>
+<meta name="agentvisa-required" content="${widgetId}">
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:64px auto;padding:0 20px;line-height:1.55;color:#111">
+  <h1 style="font-size:22px;margin-bottom:8px">Verification required</h1>
+  <p>This site grants access only to AI agents that have a verified human behind them.</p>
+  <p><strong>If you are an AI agent:</strong> obtain an AgentVisa token, then retry this request with
+  the <code>X-AgentVisa-Token</code> header. Full instructions:
+  <a href="${link}">${redirectUrl}</a></p>
+  <p><strong>If you are a human:</strong> your AI agent needs an AgentVisa — it takes about 3 minutes
+  at <a href="https://agentvisa.ai/signup">agentvisa.ai/signup</a>.</p>
+</body></html>`;
+}
+
+/**
+ * Append attribution params to the redirect URL so the landing page — and your
+ * analytics — know which site sent the agent: `?w=<widgetId>&from=<host>`.
+ * widget_id maps to a registered domain, so this is clean attribution with no PII.
+ * (We deliberately pass only the host, never the full path, which could carry the
+ * customer site's own query params.)
+ */
+export function buildRedirectUrl(redirectUrl: string, widgetId: string, host?: string): string {
+  try {
+    const u = new URL(redirectUrl);
+    u.searchParams.set("w", widgetId);
+    if (host) u.searchParams.set("from", host);
+    return u.toString();
+  } catch {
+    const sep = redirectUrl.includes("?") ? "&" : "?";
+    const qs = `w=${encodeURIComponent(widgetId)}` + (host ? `&from=${encodeURIComponent(host)}` : "");
+    return `${redirectUrl}${sep}${qs}`;
+  }
 }
 
 export interface AgentVisaConfig {

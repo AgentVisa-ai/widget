@@ -17,7 +17,7 @@
  *   req.agentVisa.result    — full VerifyResult (if verified)
  *   req.agentVisa.reason    — failure reason (if not verified + passthrough mode)
  */
-import { callVerify, resolveConfig, isLikelyAiAgent } from "../core.js";
+import { callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl } from "../core.js";
 export function agentVisa(config) {
     const resolved = resolveConfig(config);
     return async function agentVisaMiddleware(req, res, next) {
@@ -27,6 +27,9 @@ export function agentVisa(config) {
         const rawAssertion = req.headers["agentvisa-assertion"];
         const rawToken = rawAssertion ?? req.headers["x-agentvisa-token"];
         const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+        // The blocking host — passed to the redirect for attribution (?from=).
+        const hostHeader = req.headers["host"];
+        const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
         // ── No token present ────────────────────────────────────────────────────
         if (!token) {
             if (resolved.onUnverified === "passthrough") {
@@ -39,17 +42,31 @@ export function agentVisa(config) {
                 // them flooding agentvisa.ai/for-agents or triggering the growth loop
                 // for non-agent traffic.
                 if (!isLikelyAiAgent(req.headers)) {
+                    // Not clearly an agent (a browser, a human, or an agent driving a
+                    // browser). Don't dead-end with a bare 401 — serve an instructive
+                    // challenge so an agent can still find its way, while a human just
+                    // sees a clean explainer (no jarring auto-redirect).
                     res.setHeader("X-AgentVisa-Required", resolved.widgetId);
-                    res.status(401).json({
-                        error: "agentvisa_required",
-                        reason: "no_token",
-                        widget_id: resolved.widgetId,
-                        info_url: resolved.redirectUrl,
-                    });
+                    if (wantsHtml(req.headers)) {
+                        res.status(401).type("html").send(challengeHtml(resolved.widgetId, resolved.redirectUrl, host));
+                    }
+                    else {
+                        res.status(401).json({
+                            error: "agentvisa_required",
+                            reason: "no_token",
+                            widget_id: resolved.widgetId,
+                            signup_url: "https://agentvisa.ai/signup",
+                            info_url: resolved.redirectUrl,
+                            message: "This site requires an AgentVisa. If you are an AI agent, get a token at " +
+                                "https://agentvisa.ai/for-agents and retry with the X-AgentVisa-Token header. " +
+                                "If you are a human, your agent needs an AgentVisa — sign up at " +
+                                "https://agentvisa.ai/signup (about 3 minutes).",
+                        });
+                    }
                     return;
                 }
                 res.setHeader("X-AgentVisa-Required", resolved.widgetId);
-                res.setHeader("Location", resolved.redirectUrl);
+                res.setHeader("Location", buildRedirectUrl(resolved.redirectUrl, resolved.widgetId, host));
                 res.status(302).json({
                     error: "agentvisa_required",
                     reason: "no_token",
@@ -84,7 +101,7 @@ export function agentVisa(config) {
             }
             if (resolved.onUnverified === "redirect") {
                 res.setHeader("X-AgentVisa-Required", resolved.widgetId);
-                res.setHeader("Location", resolved.redirectUrl);
+                res.setHeader("Location", buildRedirectUrl(resolved.redirectUrl, resolved.widgetId, host));
                 res.status(302).json({
                     error: "agentvisa_verification_failed",
                     reason: result.reason,

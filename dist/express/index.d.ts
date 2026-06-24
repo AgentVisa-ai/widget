@@ -31,6 +31,8 @@ interface Res {
     status(code: number): Res;
     json(body: unknown): void;
     setHeader(name: string, value: string): void;
+    type(contentType: string): Res;
+    send(body: string): void;
 }
 type NextFn = (err?: unknown) => void;
 export declare function agentVisa(config: AgentVisaConfig): (req: Req, res: Res, next: NextFn) => Promise<void>;

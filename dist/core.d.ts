@@ -3,7 +3,7 @@
  * Used by Express and Next.js middleware — no framework deps here.
  */
 export declare const DEFAULT_API_BASE = "https://api.agentvisa.ai";
-export declare const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
+export declare const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/verify";
 /**
  * Detect whether an incoming request looks like an AI agent.
  *
@@ -18,6 +18,28 @@ export declare const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
  *   Weak combo (both needed): no browser fingerprint headers + no text/html in Accept
  */
 export declare function isLikelyAiAgent(headers: Record<string, string | string[] | undefined>): boolean;
+/**
+ * True when the caller will render HTML (a browser, or an agent driving one).
+ * Used to decide whether to serve an HTML challenge page vs a JSON challenge.
+ */
+export declare function wantsHtml(headers: Record<string, string | string[] | undefined>): boolean;
+/**
+ * Instructive challenge page served to browser-class unverified requests.
+ *
+ * A bare 401 dead-ends AI agents that drive a browser (they never discover
+ * /for-agents). This page guides BOTH audiences: a human sees a short
+ * explainer; an agent sees the token instructions, the <meta agentvisa-required>
+ * discovery tag, and the link to follow — so no agent is ever stranded.
+ */
+export declare function challengeHtml(widgetId: string, redirectUrl: string, host?: string): string;
+/**
+ * Append attribution params to the redirect URL so the landing page — and your
+ * analytics — know which site sent the agent: `?w=<widgetId>&from=<host>`.
+ * widget_id maps to a registered domain, so this is clean attribution with no PII.
+ * (We deliberately pass only the host, never the full path, which could carry the
+ * customer site's own query params.)
+ */
+export declare function buildRedirectUrl(redirectUrl: string, widgetId: string, host?: string): string;
 export interface AgentVisaConfig {
     /** Your widget ID from the AgentVisa dashboard */
     widgetId: string;

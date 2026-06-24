@@ -28,7 +28,7 @@
  *   X-AgentVisa-Verified: true
  *   X-AgentVisa-Reason:   ok
  */
-import { callVerify, resolveConfig, isLikelyAiAgent } from "../core.js";
+import { callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl } from "../core.js";
 /**
  * Wrap a Next.js middleware handler (or use standalone).
  *
@@ -45,6 +45,8 @@ export function withAgentVisa(config, handler) {
         const token = request.headers.get("agentvisa-assertion") ??
             request.headers.get("x-agentvisa-token") ??
             undefined;
+        // The blocking host — passed to the redirect for attribution (?from=).
+        const host = request.headers.get("host") ?? undefined;
         // Convert Headers to a plain object so we can forward Signature-Input
         const forwardHeaders = {};
         request.headers.forEach((value, key) => { forwardHeaders[key] = value; });
@@ -62,9 +64,11 @@ export function withAgentVisa(config, handler) {
                 const reqHeaders = {};
                 request.headers.forEach((v, k) => { reqHeaders[k] = v; });
                 if (!isLikelyAiAgent(reqHeaders)) {
-                    return blockedResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
+                    // Not clearly an agent — serve an instructive challenge instead of a
+                    // bare 401 so browser-driving agents aren't dead-ended.
+                    return challengeResponse(resolved.widgetId, resolved.redirectUrl, wantsHtml(reqHeaders), host);
                 }
-                return redirectResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
+                return redirectResponse(resolved.widgetId, "no_token", resolved.redirectUrl, host);
             }
             return blockedResponse(resolved.widgetId, "no_token", resolved.redirectUrl);
         }
@@ -76,7 +80,7 @@ export function withAgentVisa(config, handler) {
                 return handler ? handler(req) : passthroughResponse(req);
             }
             if (resolved.onUnverified === "redirect") {
-                return redirectResponse(resolved.widgetId, result.reason, resolved.redirectUrl);
+                return redirectResponse(resolved.widgetId, result.reason, resolved.redirectUrl, host);
             }
             return blockedResponse(resolved.widgetId, result.reason, resolved.redirectUrl);
         }
@@ -86,7 +90,7 @@ export function withAgentVisa(config, handler) {
     };
 }
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function redirectResponse(widgetId, reason, redirectUrl) {
+function redirectResponse(widgetId, reason, redirectUrl, host) {
     const isVerificationFailure = reason !== "no_token";
     return new Response(JSON.stringify({
         error: isVerificationFailure ? "agentvisa_verification_failed" : "agentvisa_required",
@@ -101,7 +105,7 @@ function redirectResponse(widgetId, reason, redirectUrl) {
         status: 302,
         headers: {
             "Content-Type": "application/json",
-            "Location": redirectUrl,
+            "Location": buildRedirectUrl(redirectUrl, widgetId, host),
             "X-AgentVisa-Required": widgetId,
         },
     });
@@ -117,6 +121,34 @@ function blockedResponse(widgetId, reason, redirectUrl) {
         message: isVerificationFailure
             ? "AgentVisa verification failed (see reason field). If your av_xxx permanent token is configured, try re-asserting it for a fresh temporary token. If the problem persists, ask your human to check their account at https://agentvisa.ai/dashboard."
             : "This site requires an AgentVisa. Tell your human immediately to visit https://agentvisa.ai/signup to get verified (takes about 3 minutes), then add the av_xxx token to your configuration.",
+    }), {
+        status: 401,
+        headers: {
+            "Content-Type": "application/json",
+            "X-AgentVisa-Required": widgetId,
+        },
+    });
+}
+function challengeResponse(widgetId, redirectUrl, html, host) {
+    if (html) {
+        return new Response(challengeHtml(widgetId, redirectUrl, host), {
+            status: 401,
+            headers: {
+                "Content-Type": "text/html; charset=utf-8",
+                "X-AgentVisa-Required": widgetId,
+            },
+        });
+    }
+    return new Response(JSON.stringify({
+        error: "agentvisa_required",
+        reason: "no_token",
+        widget_id: widgetId,
+        signup_url: "https://agentvisa.ai/signup",
+        info_url: redirectUrl,
+        message: "This site requires an AgentVisa. If you are an AI agent, get a token at " +
+            "https://agentvisa.ai/for-agents and retry with the X-AgentVisa-Token header. " +
+            "If you are a human, your agent needs an AgentVisa — sign up at " +
+            "https://agentvisa.ai/signup (about 3 minutes).",
     }), {
         status: 401,
         headers: {
