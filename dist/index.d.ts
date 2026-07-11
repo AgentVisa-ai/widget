@@ -5,7 +5,8 @@ interface WidgetOptions {
     apiBaseUrl?: string;
     /**
      * Redirect unverified agents to redirectUrl automatically.
-     * Default: true. Set to false to handle the result yourself.
+     * Default: false — you handle the result yourself. Set to true to opt in
+     * to redirecting (redirectUrl defaults to the AgentVisa for-agents page).
      */
     redirectOnFail?: boolean;
     /**

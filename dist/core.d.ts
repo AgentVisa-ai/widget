@@ -24,6 +24,21 @@ export declare function isLikelyAiAgent(headers: Record<string, string | string[
  */
 export declare function wantsHtml(headers: Record<string, string | string[] | undefined>): boolean;
 /**
+ * Machine-actionable guidance included in every unverified response body.
+ *
+ * Live agent testing (2026-07-11) showed agents act on the 401/302 JSON body
+ * first and follow links second — so the body itself must carry the complete
+ * get-in procedure, not just pointers. The direct API path is listed first
+ * because it works mid-task with no install or restart.
+ */
+export declare const ASSERT_ENDPOINT = "https://api.agentvisa.ai/v1/token/assert";
+export declare const TOKEN_HEADER = "X-AgentVisa-Token";
+export declare function unverifiedGuidance(widgetId: string): {
+    assert_endpoint: string;
+    token_header: string;
+    how_to_get_in: string;
+};
+/**
  * Instructive challenge page served to browser-class unverified requests.
  *
  * A bare 401 dead-ends AI agents that drive a browser (they never discover

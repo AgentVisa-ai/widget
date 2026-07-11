@@ -29,7 +29,18 @@
  *   X-AgentVisa-Reason:   ok
  */
 
-import { AgentVisaConfig, VerifyResult, callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl } from "../core.js";
+import { AgentVisaConfig, VerifyResult, callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance } from "../core.js";
+
+// Shared unverified-body copy (see core.unverifiedGuidance for rationale).
+function unverifiedMessage(isVerificationFailure: boolean): string {
+  return isVerificationFailure
+    ? "AgentVisa verification failed (see reason field). Your temp token may have expired — " +
+      "re-assert per how_to_get_in for a fresh one (asserting is always safe). If the problem " +
+      "persists, ask your human to check their account at https://agentvisa.ai/dashboard."
+    : "This site requires an AgentVisa. If you already hold the human's av_ token, follow " +
+      "how_to_get_in (no install or restart). Otherwise tell your human to sign up at " +
+      "https://agentvisa.ai/signup (about 2 minutes, once), then follow how_to_get_in.";
+}
 
 export type { AgentVisaConfig, VerifyResult };
 
@@ -118,9 +129,8 @@ function redirectResponse(widgetId: string, reason: string, redirectUrl: string,
       widget_id: widgetId,
       signup_url: "https://agentvisa.ai/signup",
       info_url: redirectUrl,
-      message: isVerificationFailure
-        ? "AgentVisa verification failed (see reason field). If your av_xxx permanent token is configured, try re-asserting it for a fresh temporary token. If the problem persists, ask your human to check their account at https://agentvisa.ai/dashboard."
-        : "This site requires an AgentVisa. Tell your human immediately to visit https://agentvisa.ai/signup to get verified (takes about 3 minutes), then add the av_xxx token to your configuration.",
+      ...unverifiedGuidance(widgetId),
+      message: unverifiedMessage(isVerificationFailure),
     }),
     {
       status: 302,
@@ -142,9 +152,8 @@ function blockedResponse(widgetId: string, reason: string, redirectUrl: string):
       widget_id: widgetId,
       signup_url: "https://agentvisa.ai/signup",
       info_url: redirectUrl,
-      message: isVerificationFailure
-        ? "AgentVisa verification failed (see reason field). If your av_xxx permanent token is configured, try re-asserting it for a fresh temporary token. If the problem persists, ask your human to check their account at https://agentvisa.ai/dashboard."
-        : "This site requires an AgentVisa. Tell your human immediately to visit https://agentvisa.ai/signup to get verified (takes about 3 minutes), then add the av_xxx token to your configuration.",
+      ...unverifiedGuidance(widgetId),
+      message: unverifiedMessage(isVerificationFailure),
     }),
     {
       status: 401,
@@ -173,11 +182,11 @@ function challengeResponse(widgetId: string, redirectUrl: string, html: boolean,
       widget_id: widgetId,
       signup_url: "https://agentvisa.ai/signup",
       info_url: redirectUrl,
+      ...unverifiedGuidance(widgetId),
       message:
-        "This site requires an AgentVisa. If you are an AI agent, get a token at " +
-        "https://agentvisa.ai/for-agents and retry with the X-AgentVisa-Token header. " +
+        "This site requires an AgentVisa. If you are an AI agent, follow how_to_get_in. " +
         "If you are a human, your agent needs an AgentVisa — sign up at " +
-        "https://agentvisa.ai/signup (about 3 minutes).",
+        "https://agentvisa.ai/signup (about 2 minutes).",
     }),
     {
       status: 401,

@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE = "https://api.agentvisa.ai";
 const DEFAULT_REDIRECT_URL = "https://agentvisa.ai/for-agents";
-async function verifyToken(options) {
+export async function verifyToken(options) {
     const { widgetId, plan = "basic", apiBaseUrl = DEFAULT_API_BASE, redirectOnFail = false, redirectUrl = DEFAULT_REDIRECT_URL, } = options;
     const url = new URL("/v1/verify", apiBaseUrl);
     url.searchParams.set("widget_id", widgetId);
@@ -38,36 +38,3 @@ async function verifyToken(options) {
     }
     return result;
 }
-
-class AgentVisa {
-    constructor(options) {
-        this.options = {
-            plan: "basic",
-            apiBaseUrl: "https://api.agentvisa.ai",
-            ...options,
-        };
-    }
-    /**
-     * Verify the current token for this widget.
-     * Returns the unified VerificationResult.
-     */
-    async verify() {
-        return verifyToken(this.options);
-    }
-    /**
-     * Quick static helper for one-off verification (commonly used pattern).
-     */
-    static async verify(options) {
-        return verifyToken({
-            plan: "basic",
-            apiBaseUrl: "https://api.agentvisa.ai",
-            ...options,
-        });
-    }
-}
-// Allow usage as a global script if desired (lightweight CDN use)
-if (typeof window !== "undefined") {
-    window.AgentVisa = AgentVisa;
-}
-
-export { AgentVisa };

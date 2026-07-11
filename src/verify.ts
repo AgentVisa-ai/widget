@@ -10,7 +10,7 @@ export async function verifyToken(
     widgetId,
     plan = "basic",
     apiBaseUrl = DEFAULT_API_BASE,
-    redirectOnFail = true,
+    redirectOnFail = false,
     redirectUrl = DEFAULT_REDIRECT_URL,
   } = options;
 

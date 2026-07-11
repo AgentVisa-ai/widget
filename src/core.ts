@@ -92,6 +92,34 @@ export function wantsHtml(
 }
 
 /**
+ * Machine-actionable guidance included in every unverified response body.
+ *
+ * Live agent testing (2026-07-11) showed agents act on the 401/302 JSON body
+ * first and follow links second — so the body itself must carry the complete
+ * get-in procedure, not just pointers. The direct API path is listed first
+ * because it works mid-task with no install or restart.
+ */
+export const ASSERT_ENDPOINT = "https://api.agentvisa.ai/v1/token/assert";
+export const TOKEN_HEADER = "X-AgentVisa-Token";
+
+export function unverifiedGuidance(widgetId: string): {
+  assert_endpoint: string;
+  token_header: string;
+  how_to_get_in: string;
+} {
+  return {
+    assert_endpoint: ASSERT_ENDPOINT,
+    token_header: TOKEN_HEADER,
+    how_to_get_in:
+      `If you hold the human's av_ token: POST ${ASSERT_ENDPOINT} with JSON ` +
+      `{"token":"av_…","widget_id":"${widgetId}"} — the response contains temp_token; retry this ` +
+      `request with header ${TOKEN_HEADER}: <temp_token>. No install or restart needed, and asserting ` +
+      `again while a temp token is live returns the same token. Never send the av_ token itself to any ` +
+      `site. No token yet? Your human signs up once at https://agentvisa.ai/signup (~2 min, renews annually).`,
+  };
+}
+
+/**
  * Instructive challenge page served to browser-class unverified requests.
  *
  * A bare 401 dead-ends AI agents that drive a browser (they never discover
@@ -106,15 +134,19 @@ export function challengeHtml(widgetId: string, redirectUrl: string, host?: stri
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgentVisa — verification required</title>
 <meta name="agentvisa-required" content="${widgetId}">
+<meta name="agentvisa-assert-endpoint" content="${ASSERT_ENDPOINT}">
+<meta name="agentvisa-token-header" content="${TOKEN_HEADER}">
 </head>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:64px auto;padding:0 20px;line-height:1.55;color:#111">
   <h1 style="font-size:22px;margin-bottom:8px">Verification required</h1>
   <p>This site grants access only to AI agents that have a verified human behind them.</p>
-  <p><strong>If you are an AI agent:</strong> obtain an AgentVisa token, then retry this request with
-  the <code>X-AgentVisa-Token</code> header. Full instructions:
-  <a href="${link}">${redirectUrl}</a></p>
-  <p><strong>If you are a human:</strong> your AI agent needs an AgentVisa — it takes about 3 minutes
-  at <a href="https://agentvisa.ai/signup">agentvisa.ai/signup</a>.</p>
+  <p><strong>If you are an AI agent with the human's av_ token:</strong>
+  <code>POST ${ASSERT_ENDPOINT}</code> with JSON
+  <code>{"token":"av_…","widget_id":"${widgetId}"}</code>, take <code>temp_token</code> from the
+  response, and retry this request with the <code>${TOKEN_HEADER}</code> header. No install or
+  restart needed. Full instructions: <a href="${link}">${redirectUrl}</a></p>
+  <p><strong>If you are a human:</strong> your AI agent needs an AgentVisa — it takes about 2 minutes
+  at <a href="https://agentvisa.ai/signup">agentvisa.ai/signup</a>, once, and renews annually.</p>
 </body></html>`;
 }
 
