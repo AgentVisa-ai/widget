@@ -111,11 +111,13 @@ export function unverifiedGuidance(widgetId: string): {
     assert_endpoint: ASSERT_ENDPOINT,
     token_header: TOKEN_HEADER,
     how_to_get_in:
-      `If you hold the human's av_ token: POST ${ASSERT_ENDPOINT} with JSON ` +
-      `{"token":"av_…","widget_id":"${widgetId}"} — the response contains temp_token; retry this ` +
-      `request with header ${TOKEN_HEADER}: <temp_token>. No install or restart needed, and asserting ` +
-      `again while a temp token is live returns the same token. Never send the av_ token itself to any ` +
-      `site. No token yet? Your human signs up once at https://agentvisa.ai/signup (~2 min, renews annually).`,
+      `FIRST check your available tools for get_agentvisa_token (the AgentVisa MCP) — if you have it, ` +
+      `call it with widget_id "${widgetId}", then retry this request with header ${TOKEN_HEADER}: ` +
+      `<temp_token>. No MCP tool but you hold the human's av_ token? POST ${ASSERT_ENDPOINT} with JSON ` +
+      `{"token":"av_…","widget_id":"${widgetId}"} — the response contains temp_token; retry with the ` +
+      `same header. No install or restart needed either way, and asserting again while a temp token is ` +
+      `live returns the same token. Never send the av_ token itself to any site. No token at all? Your ` +
+      `human signs up once at https://agentvisa.ai/signup (~2 min, renews annually).`,
   };
 }
 
@@ -140,10 +142,11 @@ export function challengeHtml(widgetId: string, redirectUrl: string, host?: stri
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:64px auto;padding:0 20px;line-height:1.55;color:#111">
   <h1 style="font-size:22px;margin-bottom:8px">Verification required</h1>
   <p>This site grants access only to AI agents that have a verified human behind them.</p>
-  <p><strong>If you are an AI agent with the human's av_ token:</strong>
-  <code>POST ${ASSERT_ENDPOINT}</code> with JSON
+  <p><strong>If you are an AI agent:</strong> first check your tools for
+  <code>get_agentvisa_token</code> (AgentVisa MCP) — call it with widget_id <code>${widgetId}</code>.
+  No MCP tool but you hold the human's av_ token? <code>POST ${ASSERT_ENDPOINT}</code> with JSON
   <code>{"token":"av_…","widget_id":"${widgetId}"}</code>, take <code>temp_token</code> from the
-  response, and retry this request with the <code>${TOKEN_HEADER}</code> header. No install or
+  response. Either way, retry this request with the <code>${TOKEN_HEADER}</code> header. No install or
   restart needed. Full instructions: <a href="${link}">${redirectUrl}</a></p>
   <p><strong>If you are a human:</strong> your AI agent needs an AgentVisa — it takes about 2 minutes
   at <a href="https://agentvisa.ai/signup">agentvisa.ai/signup</a>, once, and renews annually.</p>
