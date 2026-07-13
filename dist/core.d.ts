@@ -33,9 +33,13 @@ export declare function wantsHtml(headers: Record<string, string | string[] | un
  */
 export declare const ASSERT_ENDPOINT = "https://api.agentvisa.ai/v1/token/assert";
 export declare const TOKEN_HEADER = "X-AgentVisa-Token";
+/** Browser-agent portal — runs the device handoff entirely in a page. */
+export declare const PORTAL_URL = "https://agentvisa.ai/agent-portal";
 export declare function unverifiedGuidance(widgetId: string): {
     assert_endpoint: string;
     token_header: string;
+    token_cookie: string;
+    portal_url: string;
     how_to_get_in: string;
 };
 /**
@@ -85,6 +89,17 @@ export interface AgentVisaConfig {
      * policy then applies, so your site stays up even if AgentVisa is down.
      */
     timeoutMs?: number;
+    /**
+     * How long (ms) to cache a VALID verify result in memory, keyed by
+     * (token, widgetId). Defaults to 30000 (30 s).
+     *
+     * Why: a browser-driving agent presenting its token via the agentvisa_token
+     * cookie hits your middleware on EVERY page load — without a cache each one
+     * is a /v1/verify round trip and trips the API's per-IP rate limit. Failures
+     * are never cached and entries never outlive the token's own expiry, so
+     * revocation still takes effect immediately. Set 0 to disable.
+     */
+    verifyCacheMs?: number;
 }
 export interface VerifyResult {
     valid: boolean;
@@ -115,5 +130,28 @@ export interface VerifyResult {
  * Returns the full VerifyResult or a synthetic error result on network failure.
  */
 export declare function callVerify(temporaryToken: string, config: Required<AgentVisaConfig>, forwardHeaders?: Record<string, string | string[] | undefined>): Promise<VerifyResult>;
+export declare function getCachedVerify(token: string, widgetId: string): VerifyResult | null;
+export declare function setCachedVerify(token: string, widgetId: string, result: VerifyResult, ttlMs: number): void;
+/** Test/ops helper — drop all cached verify results. */
+export declare function clearVerifyCache(): void;
+/** The cookie a browser-driving agent sets to present its temp token. */
+export declare const TOKEN_COOKIE = "agentvisa_token";
+/**
+ * Read the temp token from a Cookie header value.
+ *
+ * Browser-driving agents (Claude in Chrome class) cannot set custom headers on
+ * page navigation — but the browser sends cookies automatically on every
+ * request. So `agentvisa_token=tmp_…` is the browser-native equivalent of the
+ * X-AgentVisa-Token header, with identical security properties (site-scoped,
+ * short-lived, server-verified on use).
+ */
+export declare function tokenFromCookieHeader(cookieHeader?: string | string[] | null): string | undefined;
+/**
+ * Extract the presented temp token from a request's headers, in priority order:
+ *   1. AgentVisa-Assertion  (Web Bot Auth / RFC 9421 — cryptographically bound)
+ *   2. X-AgentVisa-Token    (standard header — HTTP clients)
+ *   3. agentvisa_token cookie (browser-driving agents)
+ */
+export declare function extractToken(headers: Record<string, string | string[] | undefined>): string | undefined;
 export declare function resolveConfig(config: AgentVisaConfig): Required<AgentVisaConfig>;
 //# sourceMappingURL=core.d.ts.map

@@ -18,7 +18,7 @@
  *   req.agentVisa.reason    — failure reason (if not verified + passthrough mode)
  */
 
-import { AgentVisaConfig, VerifyResult, callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance } from "../core.js";
+import { AgentVisaConfig, VerifyResult, callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance, extractToken } from "../core.js";
 
 export type { AgentVisaConfig, VerifyResult };
 
@@ -51,12 +51,12 @@ export function agentVisa(config: AgentVisaConfig) {
     res: Res,
     next: NextFn
   ): Promise<void> {
-    // Accept both header modes:
-    //   Standard:     X-AgentVisa-Token: tmp_xxx
-    //   Web Bot Auth: AgentVisa-Assertion: tmp_xxx (covered by RFC 9421 Signature-Input)
-    const rawAssertion = req.headers["agentvisa-assertion"];
-    const rawToken = rawAssertion ?? req.headers["x-agentvisa-token"];
-    const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+    // Accept all three presentation modes (see core.extractToken):
+    //   Web Bot Auth: AgentVisa-Assertion: tmp_xxx (RFC 9421-covered)
+    //   Standard:     X-AgentVisa-Token: tmp_xxx   (HTTP clients)
+    //   Browser:      agentvisa_token cookie       (browser-driving agents —
+    //                 page navigation cannot set custom headers)
+    const token = extractToken(req.headers);
 
     // The blocking host — passed to the redirect for attribution (?from=).
     const hostHeader = req.headers["host"];

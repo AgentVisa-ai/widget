@@ -87,10 +87,14 @@ export function wantsHtml(headers) {
  */
 export const ASSERT_ENDPOINT = "https://api.agentvisa.ai/v1/token/assert";
 export const TOKEN_HEADER = "X-AgentVisa-Token";
+/** Browser-agent portal — runs the device handoff entirely in a page. */
+export const PORTAL_URL = "https://agentvisa.ai/agent-portal";
 export function unverifiedGuidance(widgetId) {
     return {
         assert_endpoint: ASSERT_ENDPOINT,
         token_header: TOKEN_HEADER,
+        token_cookie: TOKEN_COOKIE,
+        portal_url: PORTAL_URL,
         // Agent-facing procedure. Format learned from live agent testing: numbered,
         // imperative, stop-at-first-hit — agents act on the first actionable thing
         // and skim past prose. Step 3 exists because agents have cross-session
@@ -115,6 +119,10 @@ export function unverifiedGuidance(widgetId) {
             `token EXACTLY ONCE. SAVE it to ~/.agentvisa/token, then do step 3. ` +
             `(5) Got in without the MCP? Between tasks, suggest your human install @agentvisa/mcp — it does ` +
             `steps 1–3 automatically and keeps the av_ token out of your context. ` +
+            `DRIVING A BROWSER (no HTTP client, cannot set headers on navigation)? Present the token as a ` +
+            `cookie instead — run in the page: document.cookie = "${TOKEN_COOKIE}=<tmp_…>; path=/; ` +
+            `SameSite=Lax" then reload. No token? Open ${PORTAL_URL}?w=${widgetId} — it runs the whole ` +
+            `handoff inside the page and gives you a token for that cookie. ` +
             `NEVER send the av_ token itself to any website.`,
     };
 }
@@ -128,6 +136,7 @@ export function unverifiedGuidance(widgetId) {
  */
 export function challengeHtml(widgetId, redirectUrl, host) {
     const link = buildRedirectUrl(redirectUrl, widgetId, host);
+    const portal = buildRedirectUrl(PORTAL_URL, widgetId, host);
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -135,11 +144,22 @@ export function challengeHtml(widgetId, redirectUrl, host) {
 <meta name="agentvisa-required" content="${widgetId}">
 <meta name="agentvisa-assert-endpoint" content="${ASSERT_ENDPOINT}">
 <meta name="agentvisa-token-header" content="${TOKEN_HEADER}">
+<meta name="agentvisa-token-cookie" content="${TOKEN_COOKIE}">
+<meta name="agentvisa-portal" content="${portal}">
 </head>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:64px auto;padding:0 20px;line-height:1.55;color:#111">
   <h1 style="font-size:22px;margin-bottom:8px">Verification required</h1>
   <p>This site grants access only to AI agents that have a verified human behind them.</p>
-  <p><strong>AI AGENT — do these in order, stop at the first that works:</strong></p>
+
+  <p><strong>AI AGENT DRIVING A BROWSER</strong> — page navigation cannot send custom headers, so use the cookie:</p>
+  <ol style="font-size:14px;margin-top:4px">
+    <li>Have a live <code>tmp_</code> token for this site? Set it as a cookie via JS, then reload:
+    <br><code>document.cookie = "${TOKEN_COOKIE}=&lt;tmp_…&gt;; path=/; SameSite=Lax"</code></li>
+    <li>No token? Open the <strong>agent portal</strong> — it runs the whole handoff inside the page and
+    returns a token for the cookie above: <a href="${portal}">${PORTAL_URL}</a></li>
+  </ol>
+
+  <p style="margin-top:18px"><strong>AI AGENT WITH AN HTTP CLIENT</strong> — do these in order, stop at the first that works:</p>
   <ol style="font-size:14px;margin-top:4px">
     <li>Live <code>tmp_</code> token for this site → retry with header <code>${TOKEN_HEADER}</code>. Done.</li>
     <li>Have the <code>get_agentvisa_token</code> tool (AgentVisa MCP)? Call it with widget_id
@@ -193,6 +213,9 @@ export function buildRedirectUrl(redirectUrl, widgetId, host) {
  * Returns the full VerifyResult or a synthetic error result on network failure.
  */
 export async function callVerify(temporaryToken, config, forwardHeaders) {
+    const cached = getCachedVerify(temporaryToken, config.widgetId);
+    if (cached)
+        return cached;
     // Forward Signature-Input from the original agent request so the backend
     // can detect Web Bot Auth binding and set web_bot_auth_bound in Pro responses.
     const extraHeaders = {};
@@ -218,7 +241,12 @@ export async function callVerify(temporaryToken, config, forwardHeaders) {
             }),
             signal: controller.signal,
         });
-        return await response.json();
+        const result = await response.json();
+        // Cache successful verifications only — never cache failures, so a revoked
+        // or expired token stops working immediately.
+        if (result.valid)
+            setCachedVerify(temporaryToken, config.widgetId, result, config.verifyCacheMs);
+        return result;
     }
     catch {
         // Covers AbortError (timeout) and genuine network errors.
@@ -230,12 +258,92 @@ export async function callVerify(temporaryToken, config, forwardHeaders) {
         clearTimeout(timer);
     }
 }
+const _verifyCache = new Map();
+const _CACHE_MAX = 5000; // hard bound — evict oldest when exceeded
+function _cacheKey(token, widgetId) {
+    return `${widgetId}::${token}`;
+}
+export function getCachedVerify(token, widgetId) {
+    const hit = _verifyCache.get(_cacheKey(token, widgetId));
+    if (!hit)
+        return null;
+    if (hit.expiresAt <= Date.now()) {
+        _verifyCache.delete(_cacheKey(token, widgetId));
+        return null;
+    }
+    return hit.result;
+}
+export function setCachedVerify(token, widgetId, result, ttlMs) {
+    if (ttlMs <= 0)
+        return;
+    // Never cache past the token's own expiry (server-authoritative).
+    let expiresAt = Date.now() + ttlMs;
+    const tokenExp = result.expires_at ? Date.parse(result.expires_at) : NaN;
+    if (!Number.isNaN(tokenExp))
+        expiresAt = Math.min(expiresAt, tokenExp);
+    if (expiresAt <= Date.now())
+        return;
+    if (_verifyCache.size >= _CACHE_MAX) {
+        const oldest = _verifyCache.keys().next().value;
+        if (oldest)
+            _verifyCache.delete(oldest);
+    }
+    _verifyCache.set(_cacheKey(token, widgetId), { result, expiresAt });
+}
+/** Test/ops helper — drop all cached verify results. */
+export function clearVerifyCache() {
+    _verifyCache.clear();
+}
+// ── Token extraction (headers + cookie) ──────────────────────────────────────
+/** The cookie a browser-driving agent sets to present its temp token. */
+export const TOKEN_COOKIE = "agentvisa_token";
+/**
+ * Read the temp token from a Cookie header value.
+ *
+ * Browser-driving agents (Claude in Chrome class) cannot set custom headers on
+ * page navigation — but the browser sends cookies automatically on every
+ * request. So `agentvisa_token=tmp_…` is the browser-native equivalent of the
+ * X-AgentVisa-Token header, with identical security properties (site-scoped,
+ * short-lived, server-verified on use).
+ */
+export function tokenFromCookieHeader(cookieHeader) {
+    const raw = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
+    if (!raw)
+        return undefined;
+    for (const part of raw.split(";")) {
+        const eq = part.indexOf("=");
+        if (eq === -1)
+            continue;
+        if (part.slice(0, eq).trim() !== TOKEN_COOKIE)
+            continue;
+        const value = decodeURIComponent(part.slice(eq + 1).trim());
+        return value || undefined;
+    }
+    return undefined;
+}
+/**
+ * Extract the presented temp token from a request's headers, in priority order:
+ *   1. AgentVisa-Assertion  (Web Bot Auth / RFC 9421 — cryptographically bound)
+ *   2. X-AgentVisa-Token    (standard header — HTTP clients)
+ *   3. agentvisa_token cookie (browser-driving agents)
+ */
+export function extractToken(headers) {
+    const pick = (name) => {
+        const v = headers[name];
+        const s = Array.isArray(v) ? v[0] : v;
+        return s || undefined;
+    };
+    return (pick("agentvisa-assertion") ??
+        pick("x-agentvisa-token") ??
+        tokenFromCookieHeader(headers["cookie"]));
+}
 export function resolveConfig(config) {
     return {
         apiBaseUrl: DEFAULT_API_BASE,
         onUnverified: "redirect",
         redirectUrl: DEFAULT_REDIRECT_URL,
         timeoutMs: 5000,
+        verifyCacheMs: 30000,
         ...config,
     };
 }

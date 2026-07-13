@@ -28,7 +28,7 @@
  *   X-AgentVisa-Verified: true
  *   X-AgentVisa-Reason:   ok
  */
-import { callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance } from "../core.js";
+import { callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance, extractToken } from "../core.js";
 // Shared unverified-body copy (see core.unverifiedGuidance for rationale).
 function unverifiedMessage(isVerificationFailure, widgetId) {
     return isVerificationFailure
@@ -49,17 +49,17 @@ function unverifiedMessage(isVerificationFailure, widgetId) {
 export function withAgentVisa(config, handler) {
     const resolved = resolveConfig(config);
     return async function agentVisaMiddleware(request) {
-        // Accept both header modes:
-        //   Standard:     X-AgentVisa-Token: tmp_xxx
-        //   Web Bot Auth: AgentVisa-Assertion: tmp_xxx (covered by RFC 9421 Signature-Input)
-        const token = request.headers.get("agentvisa-assertion") ??
-            request.headers.get("x-agentvisa-token") ??
-            undefined;
         // The blocking host — passed to the redirect for attribution (?from=).
         const host = request.headers.get("host") ?? undefined;
         // Convert Headers to a plain object so we can forward Signature-Input
         const forwardHeaders = {};
         request.headers.forEach((value, key) => { forwardHeaders[key] = value; });
+        // Accept all three presentation modes (see core.extractToken):
+        //   Web Bot Auth: AgentVisa-Assertion (RFC 9421-covered)
+        //   Standard:     X-AgentVisa-Token   (HTTP clients)
+        //   Browser:      agentvisa_token cookie — browser-driving agents cannot
+        //                 set custom headers on page navigation
+        const token = extractToken(forwardHeaders);
         // ── No token ──────────────────────────────────────────────────────────
         if (!token) {
             if (resolved.onUnverified === "passthrough") {

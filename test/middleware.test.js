@@ -28,7 +28,7 @@ import assert from "node:assert/strict";
 
 import { agentVisa } from "../dist/express/index.js";
 import { withAgentVisa } from "../dist/next/index.js";
-import { isLikelyAiAgent, callVerify, resolveConfig } from "../dist/core.js";
+import { isLikelyAiAgent, callVerify, resolveConfig, tokenFromCookieHeader, clearVerifyCache } from "../dist/core.js";
 
 const CFG = { widgetId: "wgt_test123", apiKey: "wk_test123" };
 
@@ -307,6 +307,144 @@ test("core: callVerify passes the API key and returns the parsed verify result",
     assert.equal(result.valid, true);
     assert.equal(result.plan, "pro");
     assert.equal(calls[0].opts.headers["X-Widget-Api-Key"], CFG.apiKey);
+  } finally {
+    restoreFetch();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BROWSER-AGENT SUPPORT (cookie presentation + verify cache) — added 2026-07-13
+//
+// Browser-driving agents (Claude in Chrome class) cannot set custom headers on
+// page navigation, but the browser sends cookies on every request. These prove
+// the cookie is accepted exactly like the header, and that the short verify
+// cache spares the API on multi-page browsing without ever caching a failure.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("express: token in agentvisa_token COOKIE → verified, served (browser agents)", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: true, plan: "basic" });
+  try {
+    const mw = agentVisa(CFG);
+    const req = makeReq({ cookie: "foo=bar; agentvisa_token=tmp_cookie1; other=x" });
+    const { res, rec } = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => { nextCalled = true; });
+
+    assert.equal(nextCalled, true, "cookie-presented token must pass the gate");
+    assert.equal(rec.sent, false);
+    assert.equal(req.agentVisa.verified, true);
+    assert.equal(JSON.parse(calls[0].opts.body).token, "tmp_cookie1");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("express: header WINS over cookie when both present", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: true });
+  try {
+    const mw = agentVisa(CFG);
+    const req = makeReq({
+      "x-agentvisa-token": "tmp_header",
+      cookie: "agentvisa_token=tmp_cookie2",
+    });
+    const { res } = makeRes();
+    await mw(req, res, () => {});
+    assert.equal(JSON.parse(calls[0].opts.body).token, "tmp_header");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("express: INVALID cookie token → blocked (cookie is not a bypass)", async () => {
+  clearVerifyCache();
+  stubFetch({ valid: false, reason: "invalid" });
+  try {
+    const mw = agentVisa({ ...CFG, onUnverified: "block" });
+    const req = makeReq({ cookie: "agentvisa_token=tmp_bad" });
+    const { res, rec } = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => { nextCalled = true; });
+
+    assert.equal(nextCalled, false, "invalid cookie token must NOT reach the route");
+    assert.equal(rec.statusCode, 401);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("next: token in agentvisa_token COOKIE → continue signal", async () => {
+  clearVerifyCache();
+  stubFetch({ valid: true });
+  try {
+    const mw = withAgentVisa(CFG);
+    const request = new Request("https://example.com/protected", {
+      headers: { cookie: "agentvisa_token=tmp_nextcookie" },
+    });
+    const res = await mw(request);
+    assert.equal(res.headers.get("x-middleware-next"), "1");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("core: tokenFromCookieHeader parses, ignores other cookies, handles absence", () => {
+  assert.equal(tokenFromCookieHeader("a=1; agentvisa_token=tmp_abc; b=2"), "tmp_abc");
+  assert.equal(tokenFromCookieHeader("agentvisa_token=tmp_only"), "tmp_only");
+  assert.equal(tokenFromCookieHeader("a=1; b=2"), undefined);
+  assert.equal(tokenFromCookieHeader(""), undefined);
+  assert.equal(tokenFromCookieHeader(undefined), undefined);
+});
+
+test("core: verify cache — second call is served from cache (no extra API hit)", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: true, plan: "basic" });
+  try {
+    const cfg = resolveConfig(CFG);
+    const r1 = await callVerify("tmp_cached", cfg);
+    const r2 = await callVerify("tmp_cached", cfg);
+    assert.equal(r1.valid, true);
+    assert.equal(r2.valid, true);
+    assert.equal(calls.length, 1, "second verify must come from cache — this is what spares the rate limit");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("core: verify cache NEVER caches failures (revocation takes effect at once)", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: false, reason: "revoked" });
+  try {
+    const cfg = resolveConfig(CFG);
+    await callVerify("tmp_revoked", cfg);
+    await callVerify("tmp_revoked", cfg);
+    assert.equal(calls.length, 2, "failures must always re-check the API");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("core: verify cache is scoped per widget (no cross-site leakage)", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: true });
+  try {
+    await callVerify("tmp_same", resolveConfig({ widgetId: "wgt_A", apiKey: "k" }));
+    await callVerify("tmp_same", resolveConfig({ widgetId: "wgt_B", apiKey: "k" }));
+    assert.equal(calls.length, 2, "same token on a different widget must be verified independently");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("core: verifyCacheMs=0 disables caching", async () => {
+  clearVerifyCache();
+  const calls = stubFetch({ valid: true });
+  try {
+    const cfg = resolveConfig({ ...CFG, verifyCacheMs: 0 });
+    await callVerify("tmp_nocache", cfg);
+    await callVerify("tmp_nocache", cfg);
+    assert.equal(calls.length, 2);
   } finally {
     restoreFetch();
   }
