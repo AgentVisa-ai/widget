@@ -74,9 +74,8 @@ export function agentVisa(config) {
                     signup_url: "https://agentvisa.ai/signup",
                     info_url: resolved.redirectUrl,
                     ...unverifiedGuidance(resolved.widgetId),
-                    message: "This site requires an AgentVisa. If you already hold the human's av_ token, follow " +
-                        "how_to_get_in (no install or restart). Otherwise tell your human to sign up at " +
-                        "https://agentvisa.ai/signup (about 2 minutes, once), then follow how_to_get_in.",
+                    message: "This site requires an AgentVisa. Follow how_to_get_in — do the steps in order and " +
+                        "stop at the first that works. A human is needed only at step 4, once, ever.",
                 });
                 return;
             }
