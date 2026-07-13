@@ -112,9 +112,10 @@ export function agentVisa(config) {
                     signup_url: "https://agentvisa.ai/signup",
                     info_url: resolved.redirectUrl,
                     ...unverifiedGuidance(resolved.widgetId),
-                    message: "AgentVisa verification failed (see reason field). Your temp token may have expired — " +
-                        "re-assert per how_to_get_in for a fresh one (asserting is always safe). If the problem " +
-                        "persists, ask your human to check their account at https://agentvisa.ai/dashboard.",
+                    message: "AgentVisa verification failed (reason field says why). Two common causes: (1) your temp " +
+                        `token was issued for a DIFFERENT widget_id — re-exchange for THIS site's widget_id ` +
+                        `"${resolved.widgetId}" per how_to_get_in; (2) it expired — re-assert (always safe). ` +
+                        "If it persists, ask your human to check their account at https://agentvisa.ai/dashboard.",
                 });
                 return;
             }

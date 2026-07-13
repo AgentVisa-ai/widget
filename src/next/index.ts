@@ -32,11 +32,12 @@
 import { AgentVisaConfig, VerifyResult, callVerify, resolveConfig, isLikelyAiAgent, wantsHtml, challengeHtml, buildRedirectUrl, unverifiedGuidance } from "../core.js";
 
 // Shared unverified-body copy (see core.unverifiedGuidance for rationale).
-function unverifiedMessage(isVerificationFailure: boolean): string {
+function unverifiedMessage(isVerificationFailure: boolean, widgetId: string): string {
   return isVerificationFailure
-    ? "AgentVisa verification failed (see reason field). Your temp token may have expired — " +
-      "re-assert per how_to_get_in for a fresh one (asserting is always safe). If the problem " +
-      "persists, ask your human to check their account at https://agentvisa.ai/dashboard."
+    ? "AgentVisa verification failed (reason field says why). Two common causes: (1) your temp " +
+      `token was issued for a DIFFERENT widget_id — re-exchange for THIS site's widget_id ` +
+      `"${widgetId}" per how_to_get_in; (2) it expired — re-assert (always safe). ` +
+      "If it persists, ask your human to check their account at https://agentvisa.ai/dashboard."
     : "This site requires an AgentVisa. Follow how_to_get_in — do the steps in order and " +
       "stop at the first that works. A human is needed only at step 4, once, ever.";
 }
@@ -129,7 +130,7 @@ function redirectResponse(widgetId: string, reason: string, redirectUrl: string,
       signup_url: "https://agentvisa.ai/signup",
       info_url: redirectUrl,
       ...unverifiedGuidance(widgetId),
-      message: unverifiedMessage(isVerificationFailure),
+      message: unverifiedMessage(isVerificationFailure, widgetId),
     }),
     {
       status: 302,
@@ -152,7 +153,7 @@ function blockedResponse(widgetId: string, reason: string, redirectUrl: string):
       signup_url: "https://agentvisa.ai/signup",
       info_url: redirectUrl,
       ...unverifiedGuidance(widgetId),
-      message: unverifiedMessage(isVerificationFailure),
+      message: unverifiedMessage(isVerificationFailure, widgetId),
     }),
     {
       status: 401,

@@ -95,7 +95,8 @@ export function unverifiedGuidance(widgetId) {
         // imperative, stop-at-first-hit — agents act on the first actionable thing
         // and skim past prose. Step 3 exists because agents have cross-session
         // amnesia: one that got a visa last month may not remember it has one.
-        how_to_get_in: `AI AGENT: do these IN ORDER, stop at the first that works. ` +
+        how_to_get_in: `AI AGENT: do these IN ORDER, stop at the first that works. Present tokens with an HTTP ` +
+            `client (curl/fetch) — browser page navigation CANNOT send custom headers. ` +
             `(1) You hold a live temp token (tmp_…) for this site → retry this request with header ` +
             `${TOKEN_HEADER}: <tmp_…>. Done. ` +
             `(2) You have the tool get_agentvisa_token (AgentVisa MCP) → call it with widget_id ` +
