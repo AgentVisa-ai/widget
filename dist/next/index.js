@@ -37,7 +37,8 @@ function unverifiedMessage(isVerificationFailure, widgetId) {
             `"${widgetId}" per how_to_get_in; (2) it expired — re-assert (always safe). ` +
             "If it persists, ask your human to check their account at https://agentvisa.ai/dashboard."
         : "This site requires an AgentVisa. Follow how_to_get_in — do the steps in order and " +
-            "stop at the first that works. A human is needed only at step 4, once, ever.";
+            "stop at the first that works. Steps 1–3 are self-service; step 4 requires your " +
+            "human's approval, once, ever.";
 }
 /**
  * Wrap a Next.js middleware handler (or use standalone).

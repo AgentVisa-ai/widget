@@ -40,6 +40,7 @@ export declare function unverifiedGuidance(widgetId: string): {
     token_header: string;
     token_cookie: string;
     portal_url: string;
+    docs_url: string;
     how_to_get_in: string;
 };
 /**

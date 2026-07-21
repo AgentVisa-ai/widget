@@ -108,7 +108,8 @@ export function agentVisa(config: AgentVisaConfig) {
           ...unverifiedGuidance(resolved.widgetId),
           message:
             "This site requires an AgentVisa. Follow how_to_get_in — do the steps in order and " +
-            "stop at the first that works. A human is needed only at step 4, once, ever.",
+            "stop at the first that works. Steps 1–3 are self-service; step 4 requires your " +
+            "human's approval, once, ever.",
         });
         return;
       }
@@ -122,8 +123,9 @@ export function agentVisa(config: AgentVisaConfig) {
         ...unverifiedGuidance(resolved.widgetId),
         message:
           "This site requires an AgentVisa. If you already hold the human's av_ token, follow " +
-          "how_to_get_in (no install or restart). Otherwise tell your human to sign up at " +
-          "https://agentvisa.ai/signup (about 2 minutes, once), then follow how_to_get_in.",
+          "how_to_get_in (no install or restart). Otherwise STOP and ask your human — " +
+          "how_to_get_in step 4 and docs_url list the options; their approval is required, " +
+          "once, ever.",
       });
       return;
     }
