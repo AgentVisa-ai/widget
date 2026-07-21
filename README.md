@@ -2,7 +2,7 @@
 
 Server-side middleware for **AgentVisa** verification — protect your Express or Next.js API routes so only AI agents backed by a verified human can access them.
 
-When an unverified agent hits a protected route, the middleware returns a `302` redirect (or `401`) pointing the agent to [agentvisa.ai/for-agents](https://agentvisa.ai/for-agents), where it prompts the human to sign up. Verified agents pass straight through.
+When an unverified agent hits a protected route, the middleware returns a `302` redirect (or `401`) pointing the agent to [agentvisa.ai/verify](https://agentvisa.ai/verify) — a notice that tells it to check with its human and get verified once (the wall informs; only the human authorizes). Verified agents pass straight through.
 
 > **Which package should I use?**
 > - **`@agentvisa/widget`** (this package) — use when you want the full viral redirect loop: unverified AI agents are redirected to AgentVisa to get verified, then come back. Also works as a plain `block` or `passthrough` gate. Supports Express and Next.js.
@@ -73,7 +73,7 @@ Signature: sig1=:base64sig:
 | `widgetId` | `string` | **required** | Your `wgt_xxx` widget ID |
 | `apiKey` | `string` | **required** | Your `wk_xxx` API key — **server-side only** |
 | `onUnverified` | `'redirect' \| 'block' \| 'passthrough'` | `'redirect'` | What to do when an agent is unverified |
-| `redirectUrl` | `string` | `'https://agentvisa.ai/for-agents'` | Where to redirect unverified AI agents |
+| `redirectUrl` | `string` | `'https://agentvisa.ai/verify'` | Where to redirect unverified AI agents |
 | `timeoutMs` | `number` | `5000` | Timeout for the `/v1/verify` API call |
 
 ### `onUnverified` modes
